@@ -1,0 +1,4 @@
+*.dump
+deps
+ebin
+.#*

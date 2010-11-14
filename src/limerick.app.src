@@ -1,0 +1,11 @@
+%% -*- mode: erlang -*-
+
+{application, limerick,
+ [{description, "Mock XMPP BOSH server"},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [kernel,
+                  stdlib,
+                  crypto]},
+  {mod, {limerick_app, []}},
+  {env, []}]}.
