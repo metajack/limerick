@@ -1,0 +1,2 @@
+* add support for non-fatal errors (brutal socket close and HTTP 5xx)
+* write usage example
