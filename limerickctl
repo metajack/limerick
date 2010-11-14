@@ -1,0 +1,8 @@
+#!/bin/sh
+# -*- mode: sh -*-
+
+cd `dirname $0`
+erl -hidden -noinput -noshell \
+    -pa $PWD/ebin $PWD/deps/*/ebin \
+    -name limerickctl@`hostname` \
+    -s limerick_ctl -extra limerick@`hostname` $@

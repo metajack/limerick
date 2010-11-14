@@ -49,9 +49,15 @@ process(Req, Body) ->
         {Sid, BodyElem} ->
             case ets:lookup(limerick_sessions, Sid) of
                 [{Sid, Pid}] ->
-                    Response = limerick_session:handle_body(Pid, BodyElem),
-                    Req:respond({200, ?CORS_HEADERS,
-                                 serialize_response(Response)});
+                    case limerick_session:handle_body(Pid, BodyElem) of
+                        {killed, terminate} ->
+                            exit(normal);
+                        {killed, {http, Code}} ->
+                            Req:respond({Code, ?CORS_HEADERS, <<"killed">>});
+                        Response ->
+                            Req:respond({200, ?CORS_HEADERS,
+                                         serialize_response(Response)})
+                    end;
                 [] ->
                     Req:respond({404, ?CORS_HEADERS,
                                  <<"Session not found">>})

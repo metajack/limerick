@@ -24,9 +24,9 @@
          idle/3]).
 
 %% API
--export([start_link/1, create/1, handle_body/2]).
+-export([start_link/1, create/1, handle_body/2, kill/2]).
 
--record(sd, {sid, rid, reply_to, cache=[], pending=[]}).
+-record(sd, {sid, rid, reply_to, cache=[], pending=[], killed}).
 
 -define(WINDOW, 2).
 -define(TIMEOUT, 60000).
@@ -40,6 +40,9 @@ create(Config) ->
 
 handle_body(Pid, Body) ->
     gen_fsm:sync_send_all_state_event(Pid, {body, Body}, 65000).
+
+kill(Pid, How) ->
+    gen_fsm:send_all_state_event(Pid, {kill, How}).
 
 init(Config) ->
     Sid = proplists:get_value(sid, Config),
@@ -56,9 +59,18 @@ terminate(_Reason, _StateName, StateData) ->
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
-handle_event(_Event, _StateName, StateData) ->
-    {stop, unknown_event, StateData}.
+handle_event({kill, How}, StateName, StateData = #sd{reply_to=ReplyTo}) ->
+    case ReplyTo of
+        undefined ->
+            {next_state, StateName, StateData#sd{killed=How}};
+        _ ->
+            gen_fsm:reply(ReplyTo, {killed, How}),
+            {stop, normal, StateData}
+    end.
 
+handle_sync_event({body, _}, _From, _StateName,
+                  StateData = #sd{killed=How}) when How =/= undefined ->
+    {stop, normal, {killed, How}, StateData};
 handle_sync_event({body, Body}, From, StateName,
                   StateData = #sd{rid=Rid, pending=Pending,
                                   reply_to=ReplyTo}) ->
