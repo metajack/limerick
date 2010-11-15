@@ -43,17 +43,18 @@ process(Req, Body) ->
                 error ->
                     bad_request(Req, "bad create");
                 Response ->
-                    Req:respond({200, ?CORS_HEADERS,
+                    Req:respond({200, [{"Content-Type", "text/xml"} | ?CORS_HEADERS],
                                  serialize_response(Response)})
             end;
         {Sid, BodyElem} ->
             case ets:lookup(limerick_sessions, Sid) of
                 [{Sid, Pid}] ->
                     case limerick_session:handle_body(Pid, BodyElem) of
-                        {killed, terminate} ->
+                        {_, terminate} ->
                             exit(normal);
-                        {killed, {http, Code}} ->
-                            Req:respond({Code, ?CORS_HEADERS, <<"killed">>});
+                        {Which, {http, Code}} ->
+                            Req:respond({Code, ?CORS_HEADERS,
+                                        list_to_binary(atom_to_list(Which))});
                         Response ->
                             Req:respond({200, ?CORS_HEADERS,
                                          serialize_response(Response)})

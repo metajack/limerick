@@ -27,22 +27,20 @@ process(Req, 'POST', Path) ->
             Req:not_found()
     end;
 process(Req, 'OPTIONS', _) ->
-    Req:respond({200, [{"Content-Type", "text/plain"} | ?CORS_HEADERS], []});
+    Req:respond({200, [{"Content-Type", "text/html"},
+                       {"Access-Control-Allow-Methods",
+                        "GET, POST, OPTIONS"},
+                       {"Access-Control-Max-Age",
+                        "86400"} | ?CORS_HEADERS], <<"">>});
 process(Req, _Method, _Path) ->
     Req:respond({501, ?CORS_HEADERS, <<"Not implemented">>}).
 
 %% handle a BOSH request
 handle_bosh(Req) ->
-    case Req:get_primary_header_value('content-type') of
-        Type when Type =:= "text/xml"; Type =:= "application/xml" ->
-            case Req:recv_body() of
-                undefined ->
-                    Req:respond({400, ?CORS_HEADERS,
-                                 <<"Bad request - no body">>});
-                Body ->
-                    limerick_bosh:process(Req, Body)
-            end;
-        _ ->
+    case Req:recv_body() of
+        undefined ->
             Req:respond({400, ?CORS_HEADERS,
-                         <<"Bad request - bad content-type">>})
+                         <<"Bad request - no body">>});
+        Body ->
+            limerick_bosh:process(Req, Body)
     end.

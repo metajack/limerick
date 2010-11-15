@@ -24,9 +24,9 @@
          idle/3]).
 
 %% API
--export([start_link/1, create/1, handle_body/2, kill/2]).
+-export([start_link/1, create/1, handle_body/2, kill/2, error/2]).
 
--record(sd, {sid, rid, reply_to, cache=[], pending=[], killed}).
+-record(sd, {sid, rid, reply_to, cache=[], pending=[], killed, errored}).
 
 -define(WINDOW, 2).
 -define(TIMEOUT, 60000).
@@ -43,6 +43,9 @@ handle_body(Pid, Body) ->
 
 kill(Pid, How) ->
     gen_fsm:send_all_state_event(Pid, {kill, How}).
+
+error(Pid, How) ->
+    gen_fsm:send_all_state_event(Pid, {error, How}).
 
 init(Config) ->
     Sid = proplists:get_value(sid, Config),
@@ -62,18 +65,33 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 handle_event({kill, How}, StateName, StateData = #sd{reply_to=ReplyTo}) ->
     case ReplyTo of
         undefined ->
-            {next_state, StateName, StateData#sd{killed=How}};
+            {next_state, StateName, StateData#sd{killed=How},
+             ?INACTIVITY_TIMEOUT};
         _ ->
             gen_fsm:reply(ReplyTo, {killed, How}),
-            {stop, normal, StateData}
+            {stop, normal, StateData#sd{reply_to=undefined}}
+    end;
+handle_event({error, How}, StateName, StateData = #sd{reply_to=ReplyTo}) ->
+    case ReplyTo of
+        undefined ->
+            {next_state, StateName, StateData#sd{errored=How},
+             ?INACTIVITY_TIMEOUT};
+        _ ->
+            gen_fsm:reply(ReplyTo, {errored, How}),
+            {next_state, StateName, StateData#sd{errored=undefined,
+                                                 reply_to=undefined},
+             ?INACTIVITY_TIMEOUT}
     end.
 
 handle_sync_event({body, _}, _From, _StateName,
                   StateData = #sd{killed=How}) when How =/= undefined ->
     {stop, normal, {killed, How}, StateData};
+handle_sync_event({body, _}, _From, StateName,
+                  StateData = #sd{errored=How}) when How =/= undefined ->
+    {reply, {errored, How}, StateName, StateData#sd{errored=undefined}};
 handle_sync_event({body, Body}, From, StateName,
                   StateData = #sd{rid=Rid, pending=Pending,
-                                  reply_to=ReplyTo}) ->
+                                  reply_to=ReplyTo, cache=Cache}) ->
     %% check for a held request
     StateData1 = case ReplyTo of
                      undefined ->
@@ -112,10 +130,20 @@ handle_sync_event({body, Body}, From, StateName,
             {next_state, StateName,
              StateData1#sd{reply_to=From,
                            pending=[{NewRid, Body} | Pending]}, ?TIMEOUT};
+        OldRid when OldRid =:= Rid; OldRid - 1 =:= Rid ->
+            %% we got an old RID
+            case proplists:get_value(OldRid, Cache) of
+                undefined ->
+                    %% a previous RID must have errored before getting a reply
+                    ?MODULE:StateName({body, Body}, From,
+                                      StateData1#sd{reply_to=From});
+                Reply ->
+                    {reply, Reply, StateName, StateData1, ?INACTIVITY_TIMEOUT}
+            end;
         _ ->
             %% bad RID; terminate the session
             Reply = [{body, [{xmlns, ?NS_HTTP_BIND},
-                             {type, "terminate"}]}],
+                             {type, "terminate"}], []}],
             {stop, normal, Reply, StateData1#sd{reply_to=undefined}}
     end.
 

@@ -6,6 +6,4 @@
 -define(NS_XMPP_BIND, "urn:ietf:params:xml:ns:xmpp-bind").
 
 -define(CORS_HEADERS, [{"Access-Control-Allow-Origin", "*"},
-                       {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
-                       {"Access-Control-Allow-Headers", "Content-Type"},
-                       {"Access-Control-Max-Age", "86400"}]).
+                       {"Access-Control-Allow-Headers", "Content-Type"}]).
